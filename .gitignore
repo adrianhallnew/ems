@@ -1,0 +1,60 @@
+# EMS .gitignore
+#
+# Deliberately hand-written. `dotnet new gitignore` emits ~490 lines covering
+# tooling this project does not use, and among them `docs/` and `tests/`, which
+# would silently exclude the specification, the ADRs, and all three test
+# projects from every commit.
+#
+# Two things must stay committed and are called out here so nobody adds them:
+#   packages.lock.json  - reproducible restore depends on it
+#   Docs/ and tests/    - first-class source, not build output
+
+# Build output
+[Bb]in/
+[Oo]bj/
+artifacts/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+*.user
+*.suo
+*.rsuser
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+appsettings.*.local.json
+.claude/settings.local.json
+
+# SQL Server database files
+*.mdf
+*.ldf
+
+# Test, coverage, and Playwright output
+[Tt]est[Rr]esults/
+test-results/
+coverage-report/
+*.trx
+*.coverage
+playwright-report/
+playwright/.cache/
+playwright-traces/
+
+# MSBuild diagnostics
+*.binlog
+
+# Local run/launch scratch output
+*.log
+
+# NuGet
+*.nupkg
+*.snupkg
+
+# OS
+.DS_Store
+Thumbs.db
