@@ -115,3 +115,10 @@ generated_code = true
 generated_code = true
 dotnet_analyzer_diagnostic.severity = none
 dotnet_diagnostic.IDE0161.severity = none
+
+# Test methods are named Method_Scenario_Expectation, which CA1707 flags as
+# underscores in a member name. The convention reads better in test output than
+# the rule is worth, and the exemption is scoped to tests only - production code
+# still fails the build on it.
+[tests/**/*.cs]
+dotnet_diagnostic.CA1707.severity = none
