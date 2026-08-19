@@ -16,6 +16,9 @@ A record is never edited to reflect a change of mind. If a decision is reversed,
 | [0008](0008-timeprovider.md) | `TimeProvider` as the only clock | Accepted |
 | [0009](0009-sql-server-datastore.md) | SQL Server as the datastore — LocalDB, container, Testcontainers | Accepted |
 | [0010](0010-money-and-duration-types.md) | Money as decimal, duration as integer minutes | Accepted |
+| [0011](0011-delete-behaviours.md) | `ClientSetNull` for secondary employee references | Accepted |
+| [0012](0012-query-filter-asymmetry.md) | The soft-delete filter sits on `Employee` alone | Accepted |
+| [0013](0013-application-context-factory.md) | An Application-owned context factory port | Accepted |
 
 ## Format
 

@@ -125,6 +125,20 @@ public sealed class DeactivateEmployeeValidator : AbstractValidator<DeactivateEm
     }
 }
 
+/// <summary>Field rules for reactivating an employee.</summary>
+/// <remarks>
+/// Only an identifier to check. The rules that matter — that the employee exists and is currently
+/// inactive — are database state, so the service checks them inside the write.
+/// </remarks>
+public sealed class ReactivateEmployeeValidator : AbstractValidator<ReactivateEmployeeCommand>
+{
+    /// <summary>Initialises the rules.</summary>
+    public ReactivateEmployeeValidator()
+    {
+        RuleFor(x => x.EmployeeId).NotEmpty();
+    }
+}
+
 /// <summary>Field rules for a role change.</summary>
 public sealed class ChangeEmployeeRoleValidator : AbstractValidator<ChangeEmployeeRoleCommand>
 {

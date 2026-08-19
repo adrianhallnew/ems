@@ -1,9 +1,13 @@
 # EMS — Employee Management System: Architecture Document
 
-> **Version:** 3.0
-> **Date:** August 12, 2026
+> **Version:** 3.1
+> **Date:** August 19, 2026
 > **Architecture Pattern:** Clean Architecture (multi-project solution)
 > **Supersedes:** v2.0 (August 12, 2026)
+>
+> **v3.1 amendments**, from executing Phases 2 and 3: delete behaviours (§2.3, ADR-0011), the
+> query-filter asymmetry (§2.5, ADR-0012), the context factory port and `ActorDescription`
+> (§5.1, ADR-0013), and the unique email index (§2.4).
 
 ---
 
@@ -258,22 +262,25 @@ JobRun
 |---|---|---|
 | Employee → AspNetUsers | 1:1 via UserId | Restrict |
 | Employee → Department | N:1 via DepartmentId | Restrict |
-| Department → Employee (Manager) | 0..1 via ManagerId | SetNull |
+| Department → Employee (Manager) | 0..1 via ManagerId | ClientSetNull |
 | AttendanceRecord → Employee | N:1 | Restrict |
-| AttendanceRecord → Employee (CorrectedBy) | N:0..1 | SetNull |
+| AttendanceRecord → Employee (CorrectedBy) | N:0..1 | ClientSetNull |
 | LeaveRequest → Employee | N:1 | Restrict |
-| LeaveRequest → Employee (Reviewer, Canceller) | N:0..1 | SetNull |
+| LeaveRequest → Employee (Reviewer, Canceller) | N:0..1 | ClientSetNull |
 | LeaveBalance → Employee | N:1 | Cascade |
 | Notification → Employee | N:1 | Cascade |
-| AuditEntry → Employee | N:0..1 | SetNull |
+| AuditEntry → Employee | N:0..1 | ClientSetNull |
 
-`AuditEntry` uses SetNull rather than Restrict, because employees are soft-deleted and never actually removed; the relationship is nullable to accommodate system actors, and SetNull is the consistent choice.
+The secondary employee references are nullable so that a soft-deleted actor, or a system actor with no employee at all, is representable.
+
+**`ClientSetNull`, not `SetNull`.** SQL Server counts `ON DELETE SET NULL` as a cascade action and refuses a table with several of them pointing at one parent — `LeaveRequests` alone has three references to `Employees`. `ClientSetNull` emits `ON DELETE NO ACTION` while keeping EF Core's own null-out for tracked entities, so the intent survives in the model. The distinction is theoretical here: employees are soft-deleted, so no delete action ever fires. See ADR-0011.
 
 ### 2.4 Indexes
 
 | Table | Index | Purpose |
 |---|---|---|
 | Employee | IX_Employee_UserId (unique) | Identity lookup on every request |
+| Employee | IX_Employee_Email (unique) | Enforces spec §3.1.2 — no two employees share an email, active or inactive |
 | Employee | IX_Employee_DepartmentId | Manager scoping |
 | Employee | IX_Employee_Status | Active filter |
 | AttendanceRecord | IX_Attendance_EmployeeId_Date (unique) | One record per day; also the double-submit guard |
@@ -289,9 +296,11 @@ JobRun
 
 ### 2.5 Global Query Filters
 
-`Employee` carries a global query filter on `Status == Active`. Every query that legitimately needs inactive employees — reports, audit history, department deletion checks — opts out explicitly with `IgnoreQueryFilters()`.
+`Employee` carries a global query filter on `Status == Active`. Every query that legitimately needs inactive employees — reports, audit history, attendance state resolution, department deletion checks — opts out explicitly with `IgnoreQueryFilters()`.
 
 Without this, soft-deleted employees leak into headcounts, dropdowns, and dashboards through any query that forgets the predicate. Making the safe behaviour the default and the unsafe behaviour explicit is the correct polarity.
+
+**The dependents carry no filter, deliberately.** A departed employee's attendance, leave and notification history is exactly what reports and the audit log must keep reading. EF Core warns about that asymmetry on every model build; the warning is suppressed centrally with its reasoning attached, and the obligation it describes is real — a query joining through a required `Employee` navigation drops rows for inactive employees unless it opts out. See ADR-0012.
 
 ---
 
@@ -451,7 +460,7 @@ Every Application service takes `IDbContextFactory<ApplicationDbContext>` and cr
 
 Seychelles observes no daylight saving, so a fixed offset is correct in perpetuity. The conversion is still centralised in one place so that this assumption has exactly one home if it ever changes.
 
-Server local time is never read. `DateTime.Now` and `DateTime.Today` are banned by an analyzer rule.
+Server local time is never read. `DateTime.Now`, `DateTime.Today`, `DateTime.UtcNow`, `DateTimeOffset.Now` and `DateTimeOffset.UtcNow` are listed in `BannedSymbols.txt` at the repository root and rejected by `Microsoft.CodeAnalysis.BannedApiAnalyzers` as RS0030. Warnings are errors, so a use of any of them fails the build with the reason and the ADR number attached. The `UtcNow` pair is banned alongside the local-time ones because an untestable clock is the same defect wearing a correct time zone.
 
 ### 4.5 Derived Attendance States
 
@@ -546,7 +555,7 @@ The database runs in its own container from the official SQL Server image, which
 ### 5.1 Interfaces
 
 ```csharp
-public interface IApplicationDbContext        // implemented by Infrastructure
+public interface IApplicationDbContext : IAsyncDisposable, IDisposable
 {
     DbSet<Employee> Employees { get; }
     DbSet<Department> Departments { get; }
@@ -561,6 +570,11 @@ public interface IApplicationDbContext        // implemented by Infrastructure
     DatabaseFacade Database { get; }
 }
 
+public interface IApplicationDbContextFactory  // implemented by Infrastructure
+{
+    Task<IApplicationDbContext> CreateAsync(CancellationToken ct = default);
+}
+
 public interface ICurrentUser
 {
     Guid? EmployeeId { get; }
@@ -568,12 +582,17 @@ public interface ICurrentUser
     bool IsAdmin { get; }
     bool IsManager { get; }
     IReadOnlySet<Guid> ManagedDepartmentIds { get; }
+    string ActorDescription { get; }   // "System: ..." when no user is present
 }
 ```
 
+**The factory is a port, not EF Core's own.** `IDbContextFactory<TContext>` is generic over the concrete context, and naming `ApplicationDbContext` in Application would drag the provider across the boundary ADR-0003 draws. Infrastructure adapts one to the other in four lines. `IApplicationDbContext` is disposable so callers keep the `await using` shape. See ADR-0013.
+
+`ActorDescription` exists because the audit trail requires a human-readable actor even when `EmployeeId` is null — background jobs, the seeder, and startup migrations all write with no user present (spec §3.8.1).
+
 Application services: `IEmployeeService`, `IDepartmentService`, `IAttendanceService`, `ILeaveService`, `ILeaveBalanceService`, `IReportDataService`, `INotificationService`, `IHolidayService`, `IAuditQueryService`, `IBusinessDayCalculator`, `IAttendanceStateResolver`.
 
-Infrastructure-only interfaces: `IReportRenderer` (QuestPDF/CsvHelper), `INotificationPublisher`, `IIdentityAccountService` (password reset, unlock, role sync).
+Infrastructure-only interfaces: `IReportRenderer` (QuestPDF/CsvHelper), `INotificationPublisher`, `IIdentityAccountService` (password reset, unlock, role sync). All three are **declared** in Application, because Application calls them; only the implementations live in Infrastructure.
 
 **Every method takes a `CancellationToken`.** Blazor Server disposes circuits when tabs close, and a report query that keeps running after its consumer is gone is wasted work.
 
@@ -599,7 +618,9 @@ Each command has a FluentValidation validator covering field-level rules. **Busi
 
 ### 5.4 Query Safety
 
-Sort column names and filter fields arriving from the data grid are mapped through a static allow-list per entity. An unrecognised name falls back to the default sort rather than being interpolated into an expression. Page size is clamped to a maximum of 100.
+Sort column names arriving from the data grid are mapped through a static allow-list per entity. An unrecognised name falls back to the entity's default sort rather than being interpolated into an expression. Page size is clamped to `AppSettings.MaxPageSize`, which is 100.
+
+Filter fields need no allow-list because none of them is a string naming a column: every filter is a typed field on the filter record — an enum, a `Guid`, a `DateOnly`, or a free-text search term bound as a parameter. A filter that ever accepts a column name must gain the same treatment as sorting.
 
 ---
 

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using EMS.Application.Common.Interfaces;
 using EMS.Domain.Entities;
@@ -176,11 +177,23 @@ public sealed class AuditSaveChangesInterceptor(ICurrentUser currentUser, TimePr
         return string.Join(',', values);
     }
 
+    /// <summary>Renders a value for the JSON payload.</summary>
+    /// <param name="value">The property value.</param>
+    /// <returns>A string form that parses back to the original value.</returns>
+    /// <remarks>
+    /// Dates and times use the round-trip "O" format. The default invariant form renders
+    /// 1 January 1985 as <c>01/01/1985</c>, which an audit reader cannot parse back without
+    /// guessing the field order.
+    /// </remarks>
     private static string? Format(object? value) => value switch
     {
         null => null,
         byte[] bytes => Convert.ToHexString(bytes),
-        IFormattable formattable => formattable.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
+        DateTime date => date.ToString("O", CultureInfo.InvariantCulture),
+        DateTimeOffset offset => offset.ToString("O", CultureInfo.InvariantCulture),
+        DateOnly date => date.ToString("O", CultureInfo.InvariantCulture),
+        TimeOnly time => time.ToString("O", CultureInfo.InvariantCulture),
+        IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
         _ => value.ToString(),
     };
 }

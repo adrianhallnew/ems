@@ -1,9 +1,12 @@
 # EMS — Employee Management System: Implementation Guide
 
-> **Version:** 3.0
-> **Date:** August 12, 2026
+> **Version:** 3.1
+> **Date:** August 19, 2026
 > **Phases:** 11 (Phase 0 through Phase 10)
 > **Supersedes:** v2.0 (August 12, 2026)
+>
+> **v3.1 adds a "Deviations recorded during execution" table** to Phase 2 and Phase 3. Where a
+> phase's instructions and that table disagree, the table is what the code does and why.
 
 ---
 
@@ -462,9 +465,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>, IApplica
 services.AddDbContextFactory<ApplicationDbContext>((sp, options) =>
     options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure())
            .AddInterceptors(
-               sp.GetRequiredService<AuditSaveChangesInterceptor>(),
-               sp.GetRequiredService<AuditableEntityInterceptor>()));
+               sp.GetRequiredService<AuditableEntityInterceptor>(),
+               sp.GetRequiredService<AuditSaveChangesInterceptor>()));
 ```
+
+**The order of those two interceptors is load-bearing**, and v3.0 of this guide had it backwards.
+Interceptors run in registration order, and the audit interceptor serialises each entity as it finds
+it. Register the audit interceptor first and every Created audit row records `CreatedAt` and
+`UpdatedAt` as `0001-01-01`, because the stamping has not happened yet. The timestamps go on first.
 
 **`lifetime: ServiceLifetime.Scoped` is required on that call.** The default is singleton, which resolves its dependencies from the root provider. The audit interceptor needs the scoped `ICurrentUser`, so the default fails with `Cannot resolve scoped service '...' from root provider` — including at design time, where it stops `dotnet ef migrations add` from finding the `DbContext` at all. Register `AuditableEntityInterceptor` as a singleton (it depends only on `TimeProvider`) and `AuditSaveChangesInterceptor` as scoped.
 
@@ -519,6 +527,8 @@ Three points:
 - **`IsRowVersion()`** maps to SQL Server's `rowversion`, which the database maintains automatically on every update. Nothing depends on the application remembering to increment it.
 
 Every string property gets an explicit `HasMaxLength`. The default is `nvarchar(max)`, which is unindexable and needlessly wide.
+
+The single exception is `AuditEntry.ChangedFields`, which holds a JSON payload of unbounded shape and is never filtered or indexed on. It stays `nvarchar(max)` deliberately, and the configuration says so at the property.
 
 ### 2.5 Interceptors
 
@@ -625,6 +635,26 @@ public static async Task SeedAsync(IServiceProvider sp, CancellationToken ct)
 - [ ] `EmailFormatValidator` registered: Identity checks uniqueness but never that an email parses
 - [ ] Initial migration created, reviewed, and applied at startup
 - [ ] Seeder idempotent, deterministic, disabled by default
+
+### Deviations recorded during execution
+
+Everything below differs from this guide as originally written. Each is deliberate.
+
+| Deviation | Reason |
+|---|---|
+| `ClientSetNull` replaces `SetNull` on the five secondary employee foreign keys | SQL Server error 1785 — several `ON DELETE SET NULL` paths into one parent table. ADR-0011 |
+| EF Core's query-filter/required-navigation warning is suppressed in `AddInfrastructure` | The filter belongs on `Employee` alone; the dependents must stay readable for departed employees. ADR-0012 |
+| A unique index was added on `Employees.Email` | Spec §3.1.2 requires it; the §2.4 index table omitted it |
+| `.AddRoles<IdentityRole>()` added to the Identity registration | `RoleManager` is otherwise unregistered, and the seeder cannot provision roles without it |
+| `ICurrentUser` gained `ActorDescription` | The audit interceptor needs an actor label when `EmployeeId` is null (spec §3.8.1) |
+| `IApplicationDbContext` and `ICurrentUser` were written in Phase 2, not Phase 3 | The DbContext implements the first and the audit interceptor depends on the second. A `SystemCurrentUser` stub ships with them; Phase 4 replaces it with the claims-backed implementation |
+| Seeding covers roles, admin, departments, employees and managers only | §2.7's remaining steps — holidays, 30 days of attendance, leave requests with matching balances — depend on `HolidayService` and the leave rules, which arrive in Phase 4. Seeding them by hand here would encode those rules twice |
+| `RequireConfirmedAccount = false` shipped here; `PasswordPolicyValidator` and `EmailFormatValidator` did not | The flag is one line and blocks every admin-provisioned login without it. The two validators are auth hardening and belong with the rest of it in Phase 6 |
+| Connection string is `Database=EMS` with `TrustServerCertificate=True` and no `MultipleActiveResultSets` | Matches `architecture.md` §4.1. MARS is pointless when every service creates one short-lived context per operation |
+| Seeded employees share the admin's temporary password, all with `MustChangePassword = true` | Development-only data behind a flag that defaults to false. Spec §5.1 fixes the admin account's password source and says nothing about the generated employees |
+| Employee names are Seychellois Creole and addresses use Mahé districts and street names | Spec §5.2 asks for "Seychelles-contextual data"; this is what that means concretely |
+| `AuditEntry.ChangedFields` is the one string column with no `HasMaxLength` | A JSON payload of unbounded shape, never filtered or indexed on |
+| The audit payload renders dates with the round-trip `"O"` format | The invariant default writes `01/01/1985`, which cannot be parsed back without guessing the field order |
 
 ---
 
@@ -767,6 +797,25 @@ Good Friday is Easter − 2, Easter Saturday − 1, Easter Monday + 1, Corpus Ch
 - [ ] `BusinessDayCalculator`, `AttendanceStateResolver`, `EasterCalculator`
 - [ ] Sort/filter allow-lists per entity; page size clamped
 - [ ] `EMS.Application.csproj` references no provider package — no `Microsoft.EntityFrameworkCore.SqlServer`, no `Microsoft.Data.SqlClient`
+
+### Deviations recorded during execution
+
+| Deviation | Reason |
+|---|---|
+| Services take `IApplicationDbContextFactory`, not `IDbContextFactory<ApplicationDbContext>` as §3.5 shows | The sample as written cannot compile: naming the concrete context in Application breaks ADR-0003. Application declares the port, Infrastructure adapts EF Core's factory to it, and `IApplicationDbContext` became disposable so the `await using` shape survives. ADR-0013 |
+| `AttendanceStateResolver` split into a pure `AttendanceStateRules` plus a query-issuing resolver | The seven-step resolution order of spec §3.3.7 is the part most worth testing, and the split makes it testable with no database. 17 unit tests now cover it, including every precedence pair |
+| `BusinessDayCalculator` split the same way, into `BusinessDayRules` plus the holiday query | Same reason. An off-by-one here is a balance error, not a display error |
+| `SctClock` reads `AppSettings.TimeZoneOffsetHours` rather than the private `const` in §3.3 | The validated options type already carries the value, so a second definition would be a second place to be wrong. It also gained `TimeOf` and a `DateTimeOffset` overload of `DateOf`, both needed by the state resolver |
+| `HolidayGenerator` merges observances that land on the same date into one entry with a combined name | `PublicHoliday.Date` is uniquely indexed and spec §3.7.1 calls for exactly this. Corpus Christi is Easter + 60 and can fall on Liberation Day, so the case is reachable rather than theoretical |
+| Employee reads use two projections — `EmployeeDetailDto` without salary, `EmployeeAdminDetailDto` with it | Spec §2.5.6 requires the value to be absent from a non-Admin projection, not blanked in one |
+| A `PageRequest` base record carries paging and sorting for every filter | Not in the guide. It gives the clamp and the allow-list one shape to work against instead of six |
+| `.editorconfig` exempts `Common/Models/Result.cs` from CA1000 and CA1716 | Both rules object to the contract in `architecture.md` §5.2 rather than to a defect: `Result<T>.Success` is a static member on a generic type, and `Error` collides with a Visual Basic keyword in a C#-only solution. Scoped to the single file |
+| Three interface parameters are `startDate`/`endDate` rather than `from`/`to`/`end` | CA1716 flags all three as reserved keywords. Renaming beat suppressing |
+| Feature folders hold their files flat rather than in `Commands/`, `Queries/` and `Validators/` subfolders | Seven files per folder do not need three subdirectories. The `architecture.md` §1 comment describes what each folder contains, which is still accurate |
+| Unit tests ship with this phase | The three calculators are pure logic, so testing them costs little and every later phase builds on their correctness. 62 new tests, 75 in total |
+| Security-event writing lives in `ISecurityEventWriter`, not on `IAuditQueryService` | The audit log is read-only to the application (spec §3.8.4). One narrow hand-written path exists for events Identity produces, and it gets its own port rather than a write method on a read service |
+| An architecture test asserts the layer boundary | `architecture.md` §1.1 says the boundary "is testable: an architecture test asserts…". It now is one — `tests/EMS.UnitTests/Architecture/LayerBoundaryTests.cs` checks both the compiled references and `packages.lock.json` |
+| `AppSettings` implements `IValidatableObject` to validate its nested sections | `ValidateDataAnnotations()` does not recurse into complex properties, so the `[Range]` attributes on `Lockout`, `RateLimit` and `SeedData` were decoration with no effect |
 
 ---
 

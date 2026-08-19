@@ -54,9 +54,13 @@ public static class DependencyInjection
                 // warning describes that asymmetry, which is the intended design.
                 .ConfigureWarnings(w => w.Ignore(
                     CoreEventId.PossibleIncorrectRequiredNavigationWithQueryFilterInteractionWarning))
+                // Order is load-bearing. Interceptors run in registration order, and the audit
+                // interceptor serialises the entity as it finds it: register it first and every
+                // Created audit row records CreatedAt and UpdatedAt as 0001-01-01, because the
+                // stamping has not happened yet.
                 .AddInterceptors(
-                    sp.GetRequiredService<AuditSaveChangesInterceptor>(),
-                    sp.GetRequiredService<AuditableEntityInterceptor>()),
+                    sp.GetRequiredService<AuditableEntityInterceptor>(),
+                    sp.GetRequiredService<AuditSaveChangesInterceptor>()),
             lifetime: ServiceLifetime.Scoped);
 
         // Identity's entity framework stores resolve the context directly. The account pages are

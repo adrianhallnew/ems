@@ -8,8 +8,14 @@ namespace EMS.Application.Common.Options;
 /// </summary>
 /// <remarks>
 /// Validated at startup so a malformed value fails immediately rather than at first use.
+/// <para>
+/// The nested settings are validated here rather than by the framework:
+/// <c>ValidateDataAnnotations()</c> checks the annotations on this type and does not recurse into
+/// complex properties, so a bad <c>Lockout</c> or <c>SeedData</c> value would otherwise start the
+/// application and fail at first use.
+/// </para>
 /// </remarks>
-public sealed class AppSettings
+public sealed class AppSettings : IValidatableObject
 {
     /// <summary>The configuration section this type binds to.</summary>
     public const string SectionName = "AppSettings";
@@ -63,6 +69,33 @@ public sealed class AppSettings
 
     /// <summary>Gets the development seeding settings.</summary>
     public SeedDataSettings SeedData { get; } = new();
+
+    /// <summary>Validates the nested settings objects.</summary>
+    /// <param name="validationContext">Unused; the nested objects carry their own context.</param>
+    /// <returns>One result per broken rule, across every nested object.</returns>
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) =>
+        ValidateNested(Lockout, nameof(Lockout))
+            .Concat(ValidateNested(RateLimit, nameof(RateLimit)))
+            .Concat(ValidateNested(SeedData, nameof(SeedData)));
+
+    /// <summary>Runs data annotations over one nested settings object.</summary>
+    /// <param name="instance">The nested object.</param>
+    /// <param name="sectionName">Its property name, used to qualify the message.</param>
+    /// <returns>One result per broken rule.</returns>
+    private static IEnumerable<ValidationResult> ValidateNested(object instance, string sectionName)
+    {
+        var results = new List<ValidationResult>();
+
+        Validator.TryValidateObject(
+            instance,
+            new ValidationContext(instance),
+            results,
+            validateAllProperties: true);
+
+        return results.Select(result => new ValidationResult(
+            $"{sectionName}: {result.ErrorMessage}",
+            result.MemberNames.Select(member => $"{sectionName}.{member}")));
+    }
 }
 
 /// <summary>Account lockout settings (spec section 3.1.5).</summary>

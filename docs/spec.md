@@ -222,7 +222,7 @@ Only real events are stored. Derived states are described in §3.3.7.
 | Date | Date | The **SCT calendar date** of the clock-in. One record per employee per day |
 | Clock In | DateTime (nullable) | UTC timestamp |
 | Clock Out | DateTime (nullable) | UTC timestamp |
-| Worked Minutes | Integer (nullable, computed) | Whole minutes between Clock Out and Clock In. See ADR-0002 |
+| Worked Minutes | Integer (nullable, computed) | Whole minutes between Clock Out and Clock In. See ADR-0010 |
 | Is Flagged | Boolean | True if Clock Out is missing after end of day |
 | Correction Note | Text (nullable) | Admin's reason when manually adjusting |
 | Corrected By | FK to Employee (nullable) | Admin who made the correction |
@@ -428,9 +428,11 @@ CSV exports must neutralise formula injection. Any exported cell whose value beg
 |---|---|---|
 | Name | String (required) | e.g., "National Day", "Liberation Day" |
 | Date | Date (required, unique) | The holiday date |
-| Is Recurring | Boolean | Fixed-date holidays recur on the same day each year |
 | Rule | Enum | FixedDate or EasterRelative — see §3.7.4 |
 | Easter Offset | Integer (nullable) | Days from Easter Sunday, when Rule is EasterRelative |
+| Is System Generated | Boolean | True for a generated entry; false once an Admin edits it, which protects it from regeneration (§3.7.4) |
+
+Recurrence needs no flag of its own: `Rule` already says how next year's date is derived, and every seeded holiday recurs.
 
 `Date` is unique across the whole table. Two holidays cannot share a date; if two observances coincide, they are recorded as one entry with a combined name.
 
