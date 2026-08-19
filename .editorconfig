@@ -122,3 +122,16 @@ dotnet_diagnostic.IDE0161.severity = none
 # still fails the build on it.
 [tests/**/*.cs]
 dotnet_diagnostic.CA1707.severity = none
+
+# The result types are a contract fixed by architecture.md section 5.2, and both
+# rules here object to that contract rather than to a defect:
+#   CA1000 - Result<T>.Success and Result<T>.Fail are static members on a generic
+#            type. That is the whole point of the pattern; the alternative is a
+#            constructor call at every call site.
+#   CA1716 - `Error` collides with a Visual Basic keyword. This solution is C#
+#            only, and renaming the type would put the code out of step with the
+#            architecture document for the benefit of a language nobody uses here.
+# Scoped to the one file, so neither rule is weakened anywhere else.
+[src/EMS.Application/Common/Models/Result.cs]
+dotnet_diagnostic.CA1000.severity = none
+dotnet_diagnostic.CA1716.severity = none

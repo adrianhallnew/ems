@@ -1,3 +1,4 @@
+using EMS.Application;
 using EMS.Application.Common.Options;
 using EMS.Infrastructure;
 using EMS.Infrastructure.Data;
@@ -26,6 +27,7 @@ builder.Services.AddAuthentication(options =>
     .AddIdentityCookies();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+builder.Services.AddApplication();
 builder.Services.AddInfrastructure(connectionString);
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 

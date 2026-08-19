@@ -67,6 +67,9 @@ public static class DependencyInjection
         services.AddScoped<IApplicationDbContext>(sp =>
             sp.GetRequiredService<ApplicationDbContext>());
 
+        // The port the application layer creates its own short-lived contexts through.
+        services.AddScoped<IApplicationDbContextFactory, ApplicationDbContextFactory>();
+
         return services;
     }
 }

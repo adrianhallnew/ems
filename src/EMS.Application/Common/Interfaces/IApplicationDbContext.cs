@@ -12,7 +12,7 @@ namespace EMS.Application.Common.Interfaces;
 /// a unit of work over a set of repositories, and wrapping it blocks <c>Include</c>, projection,
 /// and split queries for no benefit. See ADR-0003.
 /// </remarks>
-public interface IApplicationDbContext
+public interface IApplicationDbContext : IAsyncDisposable, IDisposable
 {
     /// <summary>Gets the employee records.</summary>
     DbSet<Employee> Employees { get; }
