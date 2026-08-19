@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using EMS.Web.Data;
+using EMS.Infrastructure.Identity;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.Identity;

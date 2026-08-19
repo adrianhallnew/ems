@@ -619,7 +619,8 @@
       "ems.application": {
         "type": "Project",
         "dependencies": {
-          "EMS.Domain": "[1.0.0, )"
+          "EMS.Domain": "[1.0.0, )",
+          "Microsoft.EntityFrameworkCore": "[10.0.11, )"
         }
       },
       "ems.domain": {
@@ -628,7 +629,10 @@
       "ems.infrastructure": {
         "type": "Project",
         "dependencies": {
-          "EMS.Application": "[1.0.0, )"
+          "Bogus": "[35.6.5, )",
+          "EMS.Application": "[1.0.0, )",
+          "Microsoft.AspNetCore.Identity.EntityFrameworkCore": "[10.0.11, )",
+          "Microsoft.EntityFrameworkCore.SqlServer": "[10.0.11, )"
         }
       },
       "ems.web": {
@@ -637,9 +641,14 @@
           "EMS.Infrastructure": "[1.0.0, )",
           "Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore": "[10.0.11, )",
           "Microsoft.AspNetCore.Identity.EntityFrameworkCore": "[10.0.11, )",
-          "Microsoft.EntityFrameworkCore.SqlServer": "[10.0.11, )",
           "Microsoft.EntityFrameworkCore.Tools": "[10.0.11, )"
         }
+      },
+      "Bogus": {
+        "type": "CentralTransitive",
+        "requested": "[35.6.5, )",
+        "resolved": "35.6.5",
+        "contentHash": "2FGZn+aAVHjmCgClgmGkTDBVZk0zkLvAKGaxEf5JL6b3i9JbHTE4wnuY4vHCuzlCmJdU6VZjgDfHwmYkQF8VAA=="
       },
       "Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore": {
         "type": "CentralTransitive",

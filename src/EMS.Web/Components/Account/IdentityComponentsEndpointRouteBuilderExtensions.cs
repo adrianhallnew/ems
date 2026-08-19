@@ -1,8 +1,8 @@
 using System.Security.Claims;
 using System.Text.Json;
+using EMS.Infrastructure.Identity;
 using EMS.Web.Components.Account.Pages;
 using EMS.Web.Components.Account.Pages.Manage;
-using EMS.Web.Data;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Components.Authorization;

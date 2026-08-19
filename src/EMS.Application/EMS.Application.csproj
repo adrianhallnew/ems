@@ -4,10 +4,10 @@
     <ProjectReference Include="..\EMS.Domain\EMS.Domain.csproj" />
   </ItemGroup>
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+  <!-- Abstractions only. A provider package here would put the database
+       vendor inside the application layer; see ADR-0003. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+  </ItemGroup>
 
 </Project>
