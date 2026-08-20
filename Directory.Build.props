@@ -22,11 +22,54 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
-  <!-- BannedSymbols.txt is what makes "server local time is never read" an enforced
-       statement rather than an aspiration. RS0030 is a warning, and warnings are errors. -->
+  <!-- The RS0030 ban list is what makes "server local time is never read" an enforced
+       statement rather than an aspiration. RS0030 is a warning, and warnings are errors.
+
+       The list lives here rather than in a tracked BannedSymbols.txt at the repository
+       root. BannedApiAnalyzers will only read a file, but the file need not be one the
+       repository carries: the target below writes it into obj/ on every build, so a
+       fresh clone enforces the ban with no extra step and the Dockerfile needs no extra
+       COPY. See ADR-0014.
+
+       Server local time is never read: the container runs in UTC and the users do not
+       (spec 3.3.3). Every instant comes from TimeProvider, and every SCT date and time
+       from SctClock, so that probation boundaries, hire anniversaries and late-arrival
+       thresholds stay testable. See ADR-0008.
+
+       Everything below is inside the target on purpose. IntermediateOutputPath is not
+       defined while this file is being evaluated - Microsoft.Common.props imports it
+       before setting that property - so a path built out here resolves to the project
+       directory instead of obj/. Both the write and the AdditionalFiles entry therefore
+       happen at execution time, when the property is real. The target has no
+       Inputs/Outputs so it can never be skipped: a missing ban list disables RS0030
+       silently rather than failing the build. WriteOnlyWhenDifferent avoids churn.
+
+       %3B is an escaped semicolon. It is the ban list's separator between symbol and
+       message; left unescaped, MSBuild reads it as an item separator and splits each
+       entry into two malformed items. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
-    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
   </ItemGroup>
+
+  <Target Name="WriteBannedSymbols" BeforeTargets="BeforeCompile">
+    <PropertyGroup>
+      <BannedSymbolsFile>$(IntermediateOutputPath)BannedSymbols.txt</BannedSymbolsFile>
+    </PropertyGroup>
+    <ItemGroup>
+      <BannedSymbolLine Include="P:System.DateTime.Now%3BReads server local time. Use SctClock.Now (ADR-0008)." />
+      <BannedSymbolLine Include="P:System.DateTime.Today%3BReads server local time. Use SctClock.Today (ADR-0008)." />
+      <BannedSymbolLine Include="P:System.DateTime.UtcNow%3BUntestable clock. Inject TimeProvider, or use SctClock.UtcNow (ADR-0008)." />
+      <BannedSymbolLine Include="P:System.DateTimeOffset.Now%3BReads server local time. Use SctClock.Now (ADR-0008)." />
+      <BannedSymbolLine Include="P:System.DateTimeOffset.UtcNow%3BUntestable clock. Inject TimeProvider, or use SctClock.UtcNow (ADR-0008)." />
+    </ItemGroup>
+    <Error Condition="'$(IntermediateOutputPath)' == ''"
+           Text="IntermediateOutputPath is empty, so the RS0030 ban list would be written beside the project file instead of into obj/. See ADR-0014." />
+    <MakeDir Directories="$(IntermediateOutputPath)" />
+    <WriteLinesToFile File="$(BannedSymbolsFile)" Lines="@(BannedSymbolLine)"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <AdditionalFiles Include="$(BannedSymbolsFile)" Visible="false" />
+    </ItemGroup>
+  </Target>
 
 </Project>

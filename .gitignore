@@ -5,9 +5,13 @@
 # would silently exclude the specification, the ADRs, and all three test
 # projects from every commit.
 #
-# Two things must stay committed and are called out here so nobody adds them:
+# These must stay committed and are called out here so nobody adds them:
 #   packages.lock.json  - reproducible restore depends on it
-#   Docs/ and tests/    - first-class source, not build output
+#   tests/              - first-class source, not build output
+#
+# docs/ was committed until 2026-08-19 and is now deliberately excluded. It stays
+# on disk and stays normative for anyone working in this checkout; it simply does
+# not travel with the repository.
 
 # Build output
 [Bb]in/
@@ -58,3 +62,14 @@ playwright-traces/
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code configuration, hooks and local permissions
+.claude/
+
+# Specification, architecture, implementation guide and ADRs. Local only.
+docs/
+
+# Analyzer ban list. Directory.Build.props generates it into obj/ on every build,
+# so nothing at the repository root should carry this name. Ignored as a guard
+# against the tracked root file coming back. See ADR-0014.
+BannedSymbols.txt
