@@ -65,6 +65,7 @@ Thumbs.db
 
 # Claude Code configuration, hooks and local permissions
 .claude/
+CLAUDE.md
 
 # Specification, architecture, implementation guide and ADRs. Local only.
 docs/
