@@ -34,6 +34,17 @@ public class LeaveBalance : BaseEntity
     public int Used { get; set; }
 
     /// <summary>
+    /// Gets or sets the reason an Admin last adjusted this balance, or null if never adjusted.
+    /// </summary>
+    /// <remarks>
+    /// Spec §3.4.7 makes the note mandatory on every adjustment and requires it written in the same
+    /// transaction as the balance change. The column holds only the most recent one; the audit
+    /// interceptor records the before and after of every change to it, so the history is in the
+    /// audit trail rather than here.
+    /// </remarks>
+    public string? LastAdjustmentNote { get; set; }
+
+    /// <summary>
     /// Gets the days still available.
     /// </summary>
     /// <remarks>

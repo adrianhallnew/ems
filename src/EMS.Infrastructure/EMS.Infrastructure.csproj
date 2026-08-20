@@ -7,6 +7,12 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+    <!-- BackgroundService for the catch-up jobs. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <!-- Report rendering. Both are Infrastructure-only: Application declares IReportRenderer and
+         never sees a document or a CSV writer. -->
+    <PackageReference Include="QuestPDF" />
+    <PackageReference Include="CsvHelper" />
     <!-- Development seed data only. -->
     <PackageReference Include="Bogus" />
   </ItemGroup>

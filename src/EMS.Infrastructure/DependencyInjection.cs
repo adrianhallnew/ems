@@ -1,11 +1,17 @@
 using EMS.Application.Common.Interfaces;
+using EMS.Application.Notifications;
+using EMS.Application.Reports;
 using EMS.Infrastructure.Data;
 using EMS.Infrastructure.Data.Interceptors;
 using EMS.Infrastructure.Identity;
+using EMS.Infrastructure.Jobs;
+using EMS.Infrastructure.Notifications;
+using EMS.Infrastructure.Reporting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using QuestPDF.Infrastructure;
 
 namespace EMS.Infrastructure;
 
@@ -73,6 +79,29 @@ public static class DependencyInjection
 
         // The port the application layer creates its own short-lived contexts through.
         services.AddScoped<IApplicationDbContextFactory, ApplicationDbContextFactory>();
+
+        // Lets the application treat a unique index violation as an outcome without naming a
+        // provider type. See ADR-0015.
+        services.AddSingleton<IDatabaseErrorClassifier, SqlServerErrorClassifier>();
+
+        // The adapter over UserManager. Employee creation needs it; Phase 6 adds the pages that use
+        // the rest of its surface.
+        services.AddScoped<IIdentityAccountService, IdentityAccountService>();
+
+        // A singleton on purpose: a subscription has to outlive the scope that raised the
+        // notification, and it holds weak references so a dropped circuit cannot leak
+        // (architecture.md §4.9).
+        services.AddSingleton<INotificationPublisher, NotificationPublisher>();
+
+        services.AddScoped<IReportRenderer, ReportRenderer>();
+
+        // Hosted services are singletons, so each pass opens its own scope for a context.
+        services.AddHostedService<MissedClockOutJob>();
+        services.AddHostedService<NotificationPurgeJob>();
+
+        // A process-wide static that QuestPDF requires to be set before the first document is
+        // created. Composition is the one place guaranteed to run first.
+        QuestPDF.Settings.License = LicenseType.Community;
 
         return services;
     }

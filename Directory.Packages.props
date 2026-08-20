@@ -42,6 +42,12 @@
     <PackageVersion Include="MudBlazor" Version="9.8.0" />
   </ItemGroup>
 
+  <ItemGroup Label="Hosting">
+    <!-- BackgroundService for the two catch-up jobs. Infrastructure takes the abstractions package
+         rather than a framework reference: it hosts jobs, it is not a web application. -->
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.11" />
+  </ItemGroup>
+
   <ItemGroup Label="Analyzers">
     <!-- Enforces the RS0030 ban list, which is what actually bans DateTime.Now and friends.
          Directory.Build.props holds the list and writes it into obj/ at build time; see

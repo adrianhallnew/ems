@@ -1,4 +1,5 @@
 using EMS.Application;
+using EMS.Application.Common.Interfaces;
 using EMS.Application.Common.Options;
 using EMS.Infrastructure;
 using EMS.Infrastructure.Data;
@@ -6,6 +7,7 @@ using EMS.Infrastructure.Identity;
 using EMS.Web;
 using EMS.Web.Components;
 using EMS.Web.Components.Account;
+using EMS.Web.Security;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 
@@ -46,9 +48,17 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
+    .AddClaimsPrincipalFactory<EmployeeClaimsPrincipalFactory>()
     .AddDefaultTokenProviders();
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+
+// The acting user, read from the principal. Registered here rather than in Infrastructure because
+// both sources of a principal are framework types the inner layers do not reference. This replaces
+// the SystemCurrentUser default that AddInfrastructure registers; background jobs and the seeder
+// resolve that one explicitly.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUser, ClaimsCurrentUser>();
 
 var app = builder.Build();
 

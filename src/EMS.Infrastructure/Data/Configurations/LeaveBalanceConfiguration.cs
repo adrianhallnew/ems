@@ -11,6 +11,7 @@ public sealed class LeaveBalanceConfiguration : IEntityTypeConfiguration<LeaveBa
     public void Configure(EntityTypeBuilder<LeaveBalance> builder)
     {
         builder.Property(b => b.LeaveType).HasConversion<string>().HasMaxLength(20);
+        builder.Property(b => b.LastAdjustmentNote).HasMaxLength(500);
         builder.Property(b => b.RowVersion).IsRowVersion();
 
         // Derived from Entitlement - Used, so it is a read-time projection rather than a column.
