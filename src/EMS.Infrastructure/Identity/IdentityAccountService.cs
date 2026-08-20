@@ -27,6 +27,8 @@ public sealed class IdentityAccountService(
         EmployeeRole role,
         CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+
         var existing = await users.FindByEmailAsync(email).ConfigureAwait(false);
 
         if (existing is not null)
@@ -70,11 +72,32 @@ public sealed class IdentityAccountService(
     }
 
     /// <inheritdoc/>
+    public async Task<Result> DeleteAccountAsync(string userId, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+
+        var user = await users.FindByIdAsync(userId).ConfigureAwait(false);
+
+        if (user is null)
+        {
+            return Result.Fail(ErrorCode.NotFound, "Account not found.");
+        }
+
+        var deleted = await users.DeleteAsync(user).ConfigureAwait(false);
+
+        return deleted.Succeeded
+            ? Result.Success()
+            : Result.Fail(ErrorCode.BusinessRule, Describe(deleted));
+    }
+
+    /// <inheritdoc/>
     public async Task<Result<string?>> ResetPasswordAsync(
         string userId,
         string? password,
         CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+
         var user = await users.FindByIdAsync(userId).ConfigureAwait(false);
 
         if (user is null)
@@ -104,6 +127,8 @@ public sealed class IdentityAccountService(
     /// <inheritdoc/>
     public async Task<Result> UnlockAsync(string userId, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+
         var user = await users.FindByIdAsync(userId).ConfigureAwait(false);
 
         if (user is null)
@@ -120,6 +145,8 @@ public sealed class IdentityAccountService(
     /// <inheritdoc/>
     public async Task<Result> ChangeEmailAsync(string userId, string newEmail, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+
         var user = await users.FindByIdAsync(userId).ConfigureAwait(false);
 
         if (user is null)
@@ -159,6 +186,8 @@ public sealed class IdentityAccountService(
     /// <inheritdoc/>
     public async Task<Result> ChangeRoleAsync(string userId, EmployeeRole role, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+
         var user = await users.FindByIdAsync(userId).ConfigureAwait(false);
 
         if (user is null)
@@ -191,6 +220,8 @@ public sealed class IdentityAccountService(
     /// <inheritdoc/>
     public async Task<Result> RevokeSessionsAsync(string userId, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+
         var user = await users.FindByIdAsync(userId).ConfigureAwait(false);
 
         if (user is null)

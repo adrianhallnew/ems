@@ -1,3 +1,4 @@
+using EMS.Application.Common.Interfaces;
 using EMS.Application.Common.Options;
 using EMS.Domain.Entities;
 using EMS.Infrastructure.Data;
@@ -89,6 +90,10 @@ public abstract class CatchUpJob(
     private async Task RunAsync(CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
+
+        // Every audit row this pass writes is attributed to the job rather than to a bare
+        // "System" (spec §3.8.1).
+        scope.ServiceProvider.GetRequiredService<SystemActorContext>().JobName = JobName;
 
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 

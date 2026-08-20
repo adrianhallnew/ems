@@ -272,6 +272,15 @@ public sealed class LeaveService(
                 "Leave cannot be requested during the probation period."), []);
         }
 
+        // PeriodFor throws when the date precedes the hire date, and a future-dated hire can
+        // legitimately submit for a date before they start. That is an outcome, not a defect.
+        if (command.StartDate < employee.HireDate)
+        {
+            return (Result<Guid>.Fail(
+                ErrorCode.BusinessRule,
+                "Leave cannot start before the hire date."), []);
+        }
+
         var (periodStart, periodEnd) = employee.PeriodFor(command.StartDate);
 
         if (command.EndDate > periodEnd)

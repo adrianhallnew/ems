@@ -212,9 +212,8 @@ public sealed class AttendanceService(
             filtered = filtered.Where(d => d.IsFlagged);
         }
 
-        var ordered = filtered
-            .OrderByDescending(d => d.Date)
-            .ThenBy(d => d.EmployeeName)
+        var ordered = AttendanceDaySort
+            .Apply(filtered, filter.SortBy, filter.SortDescending)
             .ToList();
 
         var items = ordered
@@ -343,15 +342,25 @@ public sealed class AttendanceService(
             return Result.Fail(ErrorCode.NotFound, "Attendance record not found.");
         }
 
-        // Written before the delete so the reason reaches the audit row: the interceptor
-        // serialises the entity as it finds it.
-        record.CorrectionNote = reason;
-        record.CorrectedById = currentUser.EmployeeId;
-        record.CorrectedAt = clock.UtcNow.UtcDateTime;
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        // Two saves, one transaction. The reason has to be written before the delete so the audit
+        // interceptor serialises it — it records the entity as it finds it — and both must land
+        // together, or a failure between them leaves a record marked corrected but still present.
+        var strategy = db.Database.CreateExecutionStrategy();
 
-        db.AttendanceRecords.Remove(record);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+
+            record.CorrectionNote = reason;
+            record.CorrectedById = currentUser.EmployeeId;
+            record.CorrectedAt = clock.UtcNow.UtcDateTime;
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+
+            db.AttendanceRecords.Remove(record);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+
+            await tx.CommitAsync(ct).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
         return Result.Success();
     }

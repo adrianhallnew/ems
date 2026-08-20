@@ -6,11 +6,11 @@ namespace EMS.Infrastructure.Identity;
 /// A <see cref="ICurrentUser"/> that reports no signed-in user.
 /// </summary>
 /// <remarks>
-/// Phase 2 needs an implementation so the audit interceptor can resolve its dependency while the
-/// database schema is being built. Phase 4 replaces this with the claims-backed implementation
-/// that reads the authenticated principal; until then every write is attributed to the system.
+/// The web project replaces this with the claims-backed implementation. It stays registered as the
+/// default so anything hosted without a principal — the seeder, a design-time context, a background
+/// host — still resolves an actor, and <see cref="SystemActorContext"/> supplies the label.
 /// </remarks>
-public sealed class SystemCurrentUser : ICurrentUser
+public sealed class SystemCurrentUser(SystemActorContext systemActor) : ICurrentUser
 {
     /// <inheritdoc/>
     public Guid? EmployeeId => null;
@@ -28,5 +28,5 @@ public sealed class SystemCurrentUser : ICurrentUser
     public IReadOnlySet<Guid> ManagedDepartmentIds { get; } = new HashSet<Guid>();
 
     /// <inheritdoc/>
-    public string ActorDescription => "System";
+    public string ActorDescription => systemActor.Describe();
 }

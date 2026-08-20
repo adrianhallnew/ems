@@ -236,7 +236,18 @@ public sealed class EmployeeService(
         };
 
         db.Employees.Add(employee);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        try
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            // No transaction spans Identity and the employee row, so the account is undone by hand.
+            // Left behind, it would hold the email address and report it as taken on every retry.
+            await accounts.DeleteAccountAsync(account.Value.UserId, ct).ConfigureAwait(false);
+            throw;
+        }
 
         return Result<EmployeeCreatedDto>.Success(
             new EmployeeCreatedDto(employee.Id, account.Value.GeneratedPassword));

@@ -211,7 +211,9 @@ public sealed class ReportDataService(
 
         await using var db = await factory.CreateAsync(ct).ConfigureAwait(false);
 
-        var scoped = db.Employees.AsNoTracking().ForUser(currentUser);
+        // Inactive employees are included: spec §3.6.3 lists Status as a column, which is a
+        // constant unless a leaver can appear. Headcount below still counts the active ones.
+        var scoped = db.Employees.AsNoTracking().IgnoreQueryFilters().ForUser(currentUser);
 
         if (request.DepartmentId is { } departmentId)
         {
@@ -272,7 +274,9 @@ public sealed class ReportDataService(
                     department.ManagerId is { } managerId
                         ? managerNames.GetValueOrDefault(managerId)
                         : null,
-                    members.Count,
+
+                    // Headcount is who works here now, not who ever did.
+                    members.Count(m => m.Status == EmployeeStatus.Active),
                     members);
             })
             .OrderBy(group => group.DepartmentName)

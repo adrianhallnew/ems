@@ -78,49 +78,57 @@ public sealed class LeaveBalanceService(
 
         await using var db = await factory.CreateAsync(ct).ConfigureAwait(false);
 
-        var employee = await db.Employees
-            .SingleOrDefaultAsync(e => e.Id == command.EmployeeId, ct)
-            .ConfigureAwait(false);
+        var outcome = Result.Fail(ErrorCode.BusinessRule, "Not executed.");
+        Guid? notified = null;
 
-        if (employee is null)
+        await ExecuteAsync(db, async () =>
         {
-            return Result.Fail(ErrorCode.NotFound, "Employee not found.");
-        }
+            var employee = await db.Employees
+                .SingleOrDefaultAsync(e => e.Id == command.EmployeeId, ct)
+                .ConfigureAwait(false);
 
-        var balances = await LeaveBalanceAccessor
-            .EnsureCurrentPeriodAsync(db, employee, clock.Today, settings.Value.DefaultLeaveEntitlements, ct)
-            .ConfigureAwait(false);
+            if (employee is null)
+            {
+                return Result.Fail(ErrorCode.NotFound, "Employee not found.");
+            }
 
-        var balance = balances.FirstOrDefault(b =>
-            b.LeaveType == command.LeaveType && b.PeriodStart == command.PeriodStart);
+            var balances = await LeaveBalanceAccessor
+                .EnsureCurrentPeriodAsync(db, employee, clock.Today, settings.Value.DefaultLeaveEntitlements, ct)
+                .ConfigureAwait(false);
 
-        if (balance is null)
-        {
-            return Result.Fail(ErrorCode.NotFound, "No balance exists for that leave type and period.");
-        }
+            var balance = balances.FirstOrDefault(b =>
+                b.LeaveType == command.LeaveType && b.PeriodStart == command.PeriodStart);
 
-        if (command.Entitlement < balance.Used)
-        {
-            return Result.Fail(
-                ErrorCode.BusinessRule,
-                $"The employee has already used {balance.Used} days in this period.");
-        }
+            if (balance is null)
+            {
+                return Result.Fail(ErrorCode.NotFound, "No balance exists for that leave type and period.");
+            }
 
-        balance.Entitlement = command.Entitlement;
-        balance.LastAdjustmentNote = command.Note;
+            if (command.Entitlement < balance.Used)
+            {
+                return Result.Fail(
+                    ErrorCode.BusinessRule,
+                    $"The employee has already used {balance.Used} days in this period.");
+            }
 
-        NotificationWriter.Stage(
-            db,
-            employee.Id,
-            NotificationMessages.BalanceAdjustedTitle,
-            NotificationMessages.BalanceAdjusted(command.LeaveType),
-            "/leave/my");
+            balance.Entitlement = command.Entitlement;
+            balance.LastAdjustmentNote = command.Note;
 
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            NotificationWriter.Stage(
+                db,
+                employee.Id,
+                NotificationMessages.BalanceAdjustedTitle,
+                NotificationMessages.BalanceAdjusted(command.LeaveType),
+                "/leave/my");
 
-        publisher.Publish(employee.Id);
+            notified = employee.Id;
 
-        return Result.Success();
+            return Result.Success();
+        }, result => outcome = result, ct).ConfigureAwait(false);
+
+        Signal(outcome, notified);
+
+        return outcome;
     }
 
     /// <inheritdoc/>
@@ -146,53 +154,118 @@ public sealed class LeaveBalanceService(
 
         await using var db = await factory.CreateAsync(ct).ConfigureAwait(false);
 
-        var employee = await db.Employees
-            .SingleOrDefaultAsync(e => e.Id == command.EmployeeId, ct)
-            .ConfigureAwait(false);
+        var outcome = Result.Fail(ErrorCode.BusinessRule, "Not executed.");
+        Guid? notified = null;
 
-        if (employee is null)
+        await ExecuteAsync(db, async () =>
         {
-            return Result.Fail(ErrorCode.NotFound, "Employee not found.");
+            var employee = await db.Employees
+                .SingleOrDefaultAsync(e => e.Id == command.EmployeeId, ct)
+                .ConfigureAwait(false);
+
+            if (employee is null)
+            {
+                return Result.Fail(ErrorCode.NotFound, "Employee not found.");
+            }
+
+            var granted = await db.LeaveBalances
+                .AnyAsync(
+                    b => b.EmployeeId == command.EmployeeId
+                         && b.LeaveType == LeaveType.Maternity
+                         && b.PeriodStart == command.PeriodStart,
+                    ct)
+                .ConfigureAwait(false);
+
+            if (granted)
+            {
+                return Result.Fail(
+                    ErrorCode.Conflict,
+                    "Maternity leave has already been granted for that period.");
+            }
+
+            db.LeaveBalances.Add(new LeaveBalance
+            {
+                EmployeeId = command.EmployeeId,
+                LeaveType = LeaveType.Maternity,
+                PeriodStart = command.PeriodStart,
+                PeriodEnd = command.PeriodEnd,
+                Entitlement = command.Entitlement,
+                Used = 0,
+                LastAdjustmentNote = command.Note,
+            });
+
+            NotificationWriter.Stage(
+                db,
+                employee.Id,
+                NotificationMessages.BalanceAdjustedTitle,
+                NotificationMessages.BalanceAdjusted(LeaveType.Maternity),
+                "/leave/my");
+
+            notified = employee.Id;
+
+            return Result.Success();
+        }, result => outcome = result, ct).ConfigureAwait(false);
+
+        Signal(outcome, notified);
+
+        return outcome;
+    }
+
+    /// <summary>
+    /// Runs one mutation as a retriable unit: execution strategy outside, transaction inside.
+    /// </summary>
+    /// <param name="db">The context the body works on.</param>
+    /// <param name="body">Stages the change and reports whether it should commit.</param>
+    /// <param name="report">Receives the result, which has to survive the delegate.</param>
+    /// <param name="ct">Cancels the work.</param>
+    /// <remarks>
+    /// A balance adjustment is the fourth flow implementation.md §4.2 names. The body can run more
+    /// than once, so it stages database writes only; the bell is signalled after the commit.
+    /// </remarks>
+    private static async Task ExecuteAsync(
+        IApplicationDbContext db,
+        Func<Task<Result>> body,
+        Action<Result> report,
+        CancellationToken ct)
+    {
+        var strategy = db.Database.CreateExecutionStrategy();
+
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+
+            var result = await body().ConfigureAwait(false);
+
+            if (!result.IsSuccess)
+            {
+                await tx.RollbackAsync(ct).ConfigureAwait(false);
+                report(result);
+                return;
+            }
+
+            try
+            {
+                await db.SaveChangesAsync(ct).ConfigureAwait(false);
+                await tx.CommitAsync(ct).ConfigureAwait(false);
+                report(result);
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await tx.RollbackAsync(ct).ConfigureAwait(false);
+                report(Result.Fail(
+                    ErrorCode.ConcurrencyConflict,
+                    "Someone else changed this balance. Please retry."));
+            }
+        }).ConfigureAwait(false);
+    }
+
+    /// <summary>Signals the bell, only after a commit and only on success.</summary>
+    private void Signal(Result outcome, Guid? recipient)
+    {
+        if (outcome.IsSuccess && recipient is { } id)
+        {
+            publisher.Publish(id);
         }
-
-        var granted = await db.LeaveBalances
-            .AnyAsync(
-                b => b.EmployeeId == command.EmployeeId
-                     && b.LeaveType == LeaveType.Maternity
-                     && b.PeriodStart == command.PeriodStart,
-                ct)
-            .ConfigureAwait(false);
-
-        if (granted)
-        {
-            return Result.Fail(
-                ErrorCode.Conflict,
-                "Maternity leave has already been granted for that period.");
-        }
-
-        db.LeaveBalances.Add(new LeaveBalance
-        {
-            EmployeeId = command.EmployeeId,
-            LeaveType = LeaveType.Maternity,
-            PeriodStart = command.PeriodStart,
-            PeriodEnd = command.PeriodEnd,
-            Entitlement = command.Entitlement,
-            Used = 0,
-            LastAdjustmentNote = command.Note,
-        });
-
-        NotificationWriter.Stage(
-            db,
-            employee.Id,
-            NotificationMessages.BalanceAdjustedTitle,
-            NotificationMessages.BalanceAdjusted(LeaveType.Maternity),
-            "/leave/my");
-
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-
-        publisher.Publish(employee.Id);
-
-        return Result.Success();
     }
 
     private async Task<Result<IReadOnlyList<LeaveBalanceDto>>> LoadAsync(

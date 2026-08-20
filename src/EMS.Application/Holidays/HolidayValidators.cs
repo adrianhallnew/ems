@@ -1,3 +1,4 @@
+using EMS.Domain.Enums;
 using FluentValidation;
 
 namespace EMS.Application.Holidays;
@@ -13,6 +14,17 @@ public sealed class CreateHolidayValidator : AbstractValidator<CreateHolidayComm
     public CreateHolidayValidator()
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Rule).IsInEnum();
+
+        RuleFor(x => x.EasterOffset)
+            .NotNull()
+            .When(x => x.Rule == HolidayRule.EasterRelative)
+            .WithMessage("An Easter-relative holiday needs an offset from Easter Sunday.");
+
+        RuleFor(x => x.EasterOffset)
+            .Null()
+            .When(x => x.Rule == HolidayRule.FixedDate)
+            .WithMessage("A fixed-date holiday carries no Easter offset.");
     }
 }
 
@@ -24,5 +36,16 @@ public sealed class UpdateHolidayValidator : AbstractValidator<UpdateHolidayComm
     {
         RuleFor(x => x.HolidayId).NotEmpty();
         RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
+        RuleFor(x => x.Rule).IsInEnum();
+
+        RuleFor(x => x.EasterOffset)
+            .NotNull()
+            .When(x => x.Rule == HolidayRule.EasterRelative)
+            .WithMessage("An Easter-relative holiday needs an offset from Easter Sunday.");
+
+        RuleFor(x => x.EasterOffset)
+            .Null()
+            .When(x => x.Rule == HolidayRule.FixedDate)
+            .WithMessage("A fixed-date holiday carries no Easter offset.");
     }
 }

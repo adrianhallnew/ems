@@ -32,6 +32,10 @@ public static class DependencyInjection
     {
         services.TryAddSingleton(TimeProvider.System);
 
+        // Names the background process acting in a scope, so the audit trail can say which one
+        // wrote a row (spec §3.8.1). Scoped: a job sets it on the scope it creates.
+        services.AddScoped<SystemActorContext>();
+
         // Depends only on the clock, so it is safe as a singleton.
         services.AddSingleton<AuditableEntityInterceptor>();
 

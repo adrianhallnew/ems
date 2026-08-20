@@ -114,8 +114,10 @@ public sealed class HolidayService(IApplicationDbContextFactory factory) : IHoli
         {
             Name = command.Name,
             Date = command.Date,
-            Rule = HolidayRule.FixedDate,
-            EasterOffset = null,
+            // Both carried by the command: spec §3.7.1 makes the rule a holiday field, and an
+            // Admin adding an observance tied to Easter must say so or next year's date is wrong.
+            Rule = command.Rule,
+            EasterOffset = command.EasterOffset,
 
             // Admin-authored, so regeneration must leave it alone (spec §3.7.1).
             IsSystemGenerated = false,
@@ -154,6 +156,8 @@ public sealed class HolidayService(IApplicationDbContextFactory factory) : IHoli
 
         holiday.Name = command.Name;
         holiday.Date = command.Date;
+        holiday.Rule = command.Rule;
+        holiday.EasterOffset = command.EasterOffset;
 
         // An edited holiday stops being system-generated, which is what protects it from
         // regeneration (spec §3.7.1).

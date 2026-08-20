@@ -1,3 +1,4 @@
+using EMS.Application.Common.Interfaces;
 using EMS.Application.Common.Options;
 using EMS.Application.Common.Time;
 using EMS.Application.Holidays;
@@ -68,6 +69,10 @@ public static class DatabaseInitialization
         await using var scope = app.Services.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(DatabaseInitialization));
+
+        // Names the actor before anything writes: migration and seeding both audit as a system
+        // process rather than as a bare "System" (spec §3.8.1).
+        services.GetRequiredService<SystemActorContext>().JobName = "Startup";
 
         var db = services.GetRequiredService<ApplicationDbContext>();
         await db.Database.MigrateAsync(app.Lifetime.ApplicationStopping).ConfigureAwait(false);

@@ -10,6 +10,7 @@ namespace EMS.Web.Security;
 /// </summary>
 /// <param name="httpContextAccessor">Supplies the principal on a static SSR request or an endpoint.</param>
 /// <param name="authenticationStateProvider">Supplies it inside an interactive circuit.</param>
+/// <param name="systemActor">Names the background process acting, when no principal is.</param>
 /// <remarks>
 /// This lives in the web project rather than in Infrastructure because both sources of a principal
 /// are framework types the inner layers do not reference.
@@ -22,7 +23,8 @@ namespace EMS.Web.Security;
 /// </remarks>
 public sealed class ClaimsCurrentUser(
     IHttpContextAccessor httpContextAccessor,
-    AuthenticationStateProvider authenticationStateProvider)
+    AuthenticationStateProvider authenticationStateProvider,
+    SystemActorContext systemActor)
     : ICurrentUser
 {
     /// <inheritdoc/>
@@ -64,9 +66,10 @@ public sealed class ClaimsCurrentUser(
     /// <inheritdoc/>
     /// <remarks>
     /// Never null and never empty: the audit trail needs an actor label even when no employee is
-    /// behind the change (spec §3.8.1).
+    /// behind the change. Falling back to the running job's name rather than a bare "System" is what
+    /// makes a background write attributable (spec §3.8.1).
     /// </remarks>
-    public string ActorDescription => Email ?? "System";
+    public string ActorDescription => Email ?? systemActor.Describe();
 
     private ClaimsPrincipal? Principal
     {
@@ -79,12 +82,28 @@ public sealed class ClaimsCurrentUser(
                 return fromRequest;
             }
 
-            // Inside a circuit the framework has already set this state, so the task is complete
-            // and reading its result does not block. If it is not complete the caller is running
-            // before the first render, where there is no user to report anyway.
-            var state = authenticationStateProvider.GetAuthenticationStateAsync();
+            // A background pass has no user by definition, and asking the provider for one throws.
+            if (systemActor.JobName is not null)
+            {
+                return null;
+            }
 
-            return state.IsCompletedSuccessfully ? state.Result.User : null;
+            try
+            {
+                // Inside a circuit the framework has already set this state, so the task is
+                // complete and reading its result does not block. If it is not complete the caller
+                // is running before the first render, where there is no user to report anyway.
+                var state = authenticationStateProvider.GetAuthenticationStateAsync();
+
+                return state.IsCompletedSuccessfully ? state.Result.User : null;
+            }
+            catch (InvalidOperationException)
+            {
+                // "Do not call GetAuthenticationStateAsync outside of the DI scope for a Razor
+                // component" — the framework's way of saying there is no circuit here. Startup
+                // migration and seeding both land on this path, and both are system actors.
+                return null;
+            }
         }
     }
 }

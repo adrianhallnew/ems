@@ -27,14 +27,27 @@ public sealed record GeneratedHoliday(string Name, DateOnly Date, HolidayRule Ru
 /// <summary>Adds a holiday to the calendar.</summary>
 /// <param name="Name">The holiday name.</param>
 /// <param name="Date">The date it falls on, which must not already be taken.</param>
-public sealed record CreateHolidayCommand(string Name, DateOnly Date);
+/// <param name="Rule">How next year's date is derived — fixed, or offset from Easter.</param>
+/// <param name="EasterOffset">Days from Easter Sunday when the rule is Easter-relative.</param>
+public sealed record CreateHolidayCommand(
+    string Name,
+    DateOnly Date,
+    HolidayRule Rule,
+    int? EasterOffset);
 
 /// <summary>Edits a holiday.</summary>
 /// <param name="HolidayId">The holiday to edit.</param>
 /// <param name="Name">The holiday name.</param>
 /// <param name="Date">The date it falls on.</param>
+/// <param name="Rule">How next year's date is derived — fixed, or offset from Easter.</param>
+/// <param name="EasterOffset">Days from Easter Sunday when the rule is Easter-relative.</param>
 /// <remarks>
 /// Editing marks the entry as no longer system-generated, so regeneration leaves it alone
 /// (spec section 3.7.4).
 /// </remarks>
-public sealed record UpdateHolidayCommand(Guid HolidayId, string Name, DateOnly Date);
+public sealed record UpdateHolidayCommand(
+    Guid HolidayId,
+    string Name,
+    DateOnly Date,
+    HolidayRule Rule,
+    int? EasterOffset);

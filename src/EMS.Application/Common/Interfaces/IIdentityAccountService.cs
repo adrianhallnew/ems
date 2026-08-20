@@ -32,6 +32,17 @@ public interface IIdentityAccountService
     /// <remarks>Refreshes the security stamp, which terminates that account's sessions.</remarks>
     Task<Result<string?>> ResetPasswordAsync(string userId, string? password, CancellationToken ct);
 
+    /// <summary>Deletes an account.</summary>
+    /// <param name="userId">The account to remove.</param>
+    /// <param name="ct">Cancels the work.</param>
+    /// <returns>Success, or the reason it could not be removed.</returns>
+    /// <remarks>
+    /// Compensation, not an administrative feature. Identity and the employee row live in different
+    /// stores, so no transaction spans them: if the employee insert fails after the account was
+    /// created, this is what stops an orphan account holding the email address hostage.
+    /// </remarks>
+    Task<Result> DeleteAccountAsync(string userId, CancellationToken ct);
+
     /// <summary>Clears a lockout before it expires.</summary>
     /// <param name="userId">The Identity user.</param>
     /// <param name="ct">Cancels the write.</param>
